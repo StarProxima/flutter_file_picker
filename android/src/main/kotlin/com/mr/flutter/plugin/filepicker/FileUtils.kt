@@ -407,7 +407,8 @@ object FileUtils {
 
     /**
      * The size in bytes that the document provider reports for [uri], or `null`
-     * when it does not report one.
+     * when it does not report one. The [OpenableColumns.SIZE] column is optional,
+     * so the length of the file descriptor is used when the column is empty.
      */
     private fun getFileSize(uri: Uri, context: Context): Long? {
         if (uri.scheme != "content") {
@@ -425,7 +426,10 @@ object FileUtils {
                 if (cursor != null && cursor.moveToFirst()) {
                     val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
                     if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
-                        return cursor.getLong(sizeIndex).takeIf { it >= 0 }
+                        val size = cursor.getLong(sizeIndex)
+                        if (size >= 0) {
+                            return size
+                        }
                     }
                 }
             }
@@ -433,6 +437,18 @@ object FileUtils {
             Log.e(
                 TAG,
                 "Failed to handle file size: $ex"
+            )
+        }
+
+        try {
+            context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+                // AssetFileDescriptor.UNKNOWN_LENGTH is negative.
+                return descriptor.length.takeIf { it >= 0 }
+            }
+        } catch (ex: Exception) {
+            Log.e(
+                TAG,
+                "Failed to handle file descriptor size: $ex"
             )
         }
 
@@ -575,6 +591,9 @@ object FileUtils {
                 ?: "unamed")
 
         val file = File(path)
+        // Set when the size was not reported and the file turned out to be over the limit
+        // while it was being copied.
+        var uncachedSize: Long? = null
 
         if (!file.exists()) {
             try {
@@ -586,8 +605,16 @@ object FileUtils {
                 val out = BufferedOutputStream(fileOutputStream)
                 val buffer = ByteArray(8192)
                 var len: Int
+                var copiedSize = 0L
 
                 while ((fileInputStream!!.read(buffer).also { len = it }) >= 0) {
+                    copiedSize += len
+                    // Without a reported size, the limit is checked while copying: past it,
+                    // the rest of the file is only counted, not written.
+                    if (exceedsMaxCachedFileSize(copiedSize, maxCachedFileSize)) {
+                        uncachedSize = copiedSize + countRemainingBytes(fileInputStream, buffer)
+                        break
+                    }
                     out.write(buffer, 0, len)
                 }
                 out.flush()
@@ -605,6 +632,17 @@ object FileUtils {
             }
         }
 
+        if (uncachedSize != null) {
+            file.delete()
+            file.parentFile?.delete()
+            fileInfo
+                .withName(fileName)
+                .withUri(uri)
+                .withSize(uncachedSize)
+
+            return fileInfo.build()
+        }
+
         if (withData) {
             loadData(file, fileInfo)
         }
@@ -616,6 +654,16 @@ object FileUtils {
             .withSize(file.length())
 
         return fileInfo.build()
+    }
+
+    /** Reads [input] to its end without keeping the data, and returns how many bytes it had. */
+    private fun countRemainingBytes(input: InputStream, buffer: ByteArray): Long {
+        var count = 0L
+        var len: Int
+        while ((input.read(buffer).also { len = it }) >= 0) {
+            count += len
+        }
+        return count
     }
 
     /**

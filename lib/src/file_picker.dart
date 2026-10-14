@@ -87,9 +87,10 @@ abstract class FilePicker extends PlatformInterface {
   /// spending the time and storage to copy a large file just to find out it is too big. Such a
   /// [PlatformFile] has no [PlatformFile.path] and no [PlatformFile.bytes]: its [PlatformFile.size]
   /// is the size reported by the document provider and its [PlatformFile.identifier] is the content
-  /// URI of the file. Files whose size the document provider does not report, and images
-  /// re-encoded by [compressionQuality], are copied as usual. Defaults to `null`, which copies
-  /// every file. Ignored on all other platforms.
+  /// URI of the file. A file whose size the document provider does not report is copied only up
+  /// to the limit: past it, the partial copy is deleted and the file is returned the same way,
+  /// with its size counted while reading. Images re-encoded by [compressionQuality] are copied as
+  /// usual. Defaults to `null`, which copies every file. Ignored on all other platforms.
   ///
   /// The result is wrapped in a [FilePickerResult] which contains helper getters
   /// with useful information regarding the picked [List<PlatformFile>].

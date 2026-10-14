@@ -163,7 +163,7 @@ if (result != null) {
   }
 }
 ```
-Android copies every picked file into the app's cache before returning it, which takes time and storage for large files, even when the app is only going to reject them. `maxCachedFileSize` sets the largest size, in bytes, that is copied. A larger file is returned without a `path` and without `bytes`: its `size` is the size reported by the document provider and its `identifier` is the content URI, but its content cannot be read through the returned file. Files whose size the document provider does not report are copied as usual, and so are all files when the option is not set. It is ignored on all other platforms.
+Android copies every picked file into the app's cache before returning it, which takes time and storage for large files, even when the app is only going to reject them. `maxCachedFileSize` sets the largest size, in bytes, that is copied. A larger file is returned without a `path` and without `bytes`: its `size` is the size reported by the document provider and its `identifier` is the content URI, but its content cannot be read through the returned file. When the document provider does not report the size, the file is copied only up to the limit: past it, the partial copy is deleted and the file is returned the same way, with its size counted while reading. All files are copied when the option is not set. It is ignored on all other platforms.
 #### Pick and upload a file to Firebase Storage with Flutter Web
 ```dart
 FilePickerResult? result = await FilePicker.platform.pickFiles();

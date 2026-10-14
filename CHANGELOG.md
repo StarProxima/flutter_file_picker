@@ -1,6 +1,6 @@
 ## 10.4.0
 #### Android
-- Added `maxCachedFileSize` to `FilePicker.pickFiles()`, to skip copying picked files larger than the given size, in bytes, to the app's cache. Those files are returned without a `path`, with the size reported by the document provider as `size` and their content URI as `identifier`. Ignored on all other platforms.
+- Added `maxCachedFileSize` to `FilePicker.pickFiles()`, to skip copying picked files larger than the given size, in bytes, to the app's cache. Those files are returned without a `path`, with the size reported by the document provider as `size` and their content URI as `identifier`. A file whose size is not reported is copied only up to the limit, then counted without being written. Ignored on all other platforms.
 
 ## 10.3.10
 #### Android
