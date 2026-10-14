@@ -55,6 +55,94 @@ void main() {
       expect(withoutSize.lengthSync(), isNull);
     });
 
+    test('FilePickerAndroidOptions toMap leaves the size limit unset', () {
+      final map = const FilePickerAndroidOptions().toMap();
+      expect(map, containsPair('maxCachedFileSize', isNull));
+      expect(map['safOptions'], isA<Map<String, Object?>>());
+    });
+
+    test('FilePickerAndroidOptions toMap contains maxCachedFileSize', () {
+      const options = FilePickerAndroidOptions(maxCachedFileSize: 50 * 1024);
+      expect(options.toMap(), containsPair('maxCachedFileSize', 51200));
+      expect(options.toMap()['safOptions'], options.safOptions.toMap());
+    });
+
+    test('FilePickerAndroidOptions rejects a negative maxCachedFileSize', () {
+      expect(
+        () => FilePickerAndroidOptions(maxCachedFileSize: -1),
+        throwsAssertionError,
+      );
+      expect(const FilePickerAndroidOptions(maxCachedFileSize: 0), isNotNull);
+    });
+
+    test('AndroidPlatformFile.fromMap uses the uri when there is no path', () {
+      final file = AndroidPlatformFile.fromMap({
+        'path': null,
+        'name': 'video.mp4',
+        'size': 629145600,
+        'uri':
+            'content://com.android.providers.media.documents/document/video%3A42',
+      });
+      expect(
+        file.uri,
+        Uri.parse(
+          'content://com.android.providers.media.documents/document/video%3A42',
+        ),
+      );
+      expect(file.name, 'video.mp4');
+      expect(file.path, isNull);
+      expect(file.lengthSync(), 629145600);
+    });
+
+    test('AndroidPlatformFile.fromMap prefers the path over the uri', () {
+      final file = AndroidPlatformFile.fromMap({
+        'path': '/tmp/test_file.txt',
+        'uri': 'content://media/external/file/1',
+      });
+      expect(file.uri, Uri.file('/tmp/test_file.txt'));
+      expect(file.path, '/tmp/test_file.txt');
+    });
+
+    test(
+      'pickFile sends maxCachedFileSize and returns a file that was not copied',
+      () async {
+        final picker = FilePickerAndroid();
+        Map<Object?, Object?>? sentOptions;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(picker.methodChannel, (call) async {
+              sentOptions =
+                  (call.arguments as Map<Object?, Object?>)['androidSafOptions']
+                      as Map<Object?, Object?>?;
+              return [
+                {
+                  'path': null,
+                  'name': 'video.mp4',
+                  'size': 629145600,
+                  'uri': 'content://media/external/video/media/42',
+                },
+              ];
+            });
+        addTearDown(
+          () => TestDefaultBinaryMessengerBinding
+              .instance
+              .defaultBinaryMessenger
+              .setMockMethodCallHandler(picker.methodChannel, null),
+        );
+
+        final file = await picker.pickFile(
+          androidOptions: const FilePickerAndroidOptions(
+            maxCachedFileSize: 50 * 1024 * 1024,
+          ),
+        );
+
+        expect(sentOptions?['maxCachedFileSize'], 50 * 1024 * 1024);
+        expect(file?.name, 'video.mp4');
+        expect(file?.path, isNull);
+        expect(file?.uri, Uri.parse('content://media/external/video/media/42'));
+        expect(file?.lengthSync(), 629145600);
+      },
+    );
+
     test(
       'pickFileAndDirectoryPaths returns decoded paths that match the cached files',
       () async {

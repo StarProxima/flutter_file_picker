@@ -52,12 +52,37 @@ final class AndroidSAFOptions {
 
 /// Configuration options specific to the Android platform.
 final class FilePickerAndroidOptions extends AndroidOptions {
-  const FilePickerAndroidOptions({this.safOptions = const AndroidSAFOptions()});
+  const FilePickerAndroidOptions({
+    this.safOptions = const AndroidSAFOptions(),
+    this.maxCachedFileSize,
+  }) : assert(
+         maxCachedFileSize == null || maxCachedFileSize >= 0,
+         'maxCachedFileSize cannot be negative',
+       );
 
   /// Options for working with the Android Storage Access Framework.
   final AndroidSAFOptions safOptions;
 
+  /// The largest size, in bytes, of a picked file that is copied to the app's
+  /// cache.
+  ///
+  /// Files larger than this are not copied, which avoids spending the time and
+  /// storage to copy a large file just to find out it is too big. The returned
+  /// file then has no local path: its `uri` is the content URI of the file and
+  /// its `lengthSync()` is the size reported by the document provider. Its
+  /// content cannot be read through the returned file, read it from the content
+  /// URI instead.
+  ///
+  /// Files that are not larger than this, files whose size the document
+  /// provider does not report, and images re-encoded by `compressionQuality`
+  /// are copied as usual. When `null`, which is the default, every file is
+  /// copied.
+  final int? maxCachedFileSize;
+
   Map<String, Object?> toMap() {
-    return {'safOptions': safOptions.toMap()};
+    return {
+      'safOptions': safOptions.toMap(),
+      'maxCachedFileSize': maxCachedFileSize,
+    };
   }
 }

@@ -38,7 +38,12 @@ base class AndroidPlatformFile extends PlatformFile {
       );
     }
 
-    final Uri uri = path.contains('://')
+    // A file that was not copied to the app's cache has no path, only the
+    // content URI of the file.
+    final String? rawUri = data['uri'] as String?;
+    final Uri uri = path.isEmpty && rawUri != null
+        ? Uri.parse(rawUri)
+        : path.contains('://')
         ? (Uri.tryParse(path) ?? Uri.file(path))
         : Uri.file(path);
 

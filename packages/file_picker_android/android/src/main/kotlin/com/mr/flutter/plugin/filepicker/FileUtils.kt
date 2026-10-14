@@ -77,6 +77,7 @@ object FileUtils {
             val isReadWrite = accessStr == "readWrite"
 
             val hasSafOptions = androidSafOptions != null
+            val maxCachedFileSize = (androidSafOptions?.get("maxCachedFileSize") as? Number)?.toLong()
 
             fun maybeTakePersistableUriPermission(uri: Uri) {
                  if (isPersist && autoPersist) {
@@ -102,7 +103,7 @@ object FileUtils {
                             var uri = data.clipData!!.getItemAt(i).uri
                             maybeTakePersistableUriPermission(uri)
                             uri = processUri(activity, uri, compressionQuality)
-                            addFile(activity, uri, files, hasSafOptions, isReadWrite)
+                            addFile(activity, uri, files, hasSafOptions, isReadWrite, maxCachedFileSize)
                         }
                         finishWithSuccess(files)
                     }
@@ -128,7 +129,7 @@ object FileUtils {
                             }
                         } else {
                             maybeTakePersistableUriPermission(data.data!!)
-                            addFile(activity, uri, files, hasSafOptions, isReadWrite)
+                            addFile(activity, uri, files, hasSafOptions, isReadWrite, maxCachedFileSize)
                             handleFileResult(files)
                         }
                     }
@@ -137,7 +138,7 @@ object FileUtils {
                         val fileUris = getSelectedItems(data.extras!!)
                         fileUris?.filterIsInstance<Uri>()?.forEach { uri ->
                             maybeTakePersistableUriPermission(uri)
-                            addFile(activity, uri, files, hasSafOptions, isReadWrite)
+                            addFile(activity, uri, files, hasSafOptions, isReadWrite, maxCachedFileSize)
                         }
                         finishWithSuccess(files)
                     }
@@ -546,9 +547,10 @@ object FileUtils {
         uri: Uri,
         files: MutableList<FileInfo>,
         hasSafOptions: Boolean = false,
-        isReadWrite: Boolean = false
+        isReadWrite: Boolean = false,
+        maxCachedFileSize: Long? = null
     ) {
-        openFileStream(activity, uri, hasSafOptions, isReadWrite)?.let { file ->
+        openFileStream(activity, uri, hasSafOptions, isReadWrite, maxCachedFileSize)?.let { file ->
             files.add(file)
         }
     }
@@ -633,6 +635,40 @@ object FileUtils {
         }
 
         return result
+    }
+
+    /**
+     * The size in bytes that the document provider reports for [uri], or `null`
+     * when it does not report one.
+     */
+    private fun getFileSize(uri: Uri, context: Context): Long? {
+        if (uri.scheme != "content") {
+            return null
+        }
+
+        try {
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.SIZE),
+                null,
+                null,
+                null
+            ).use { cursor ->
+                if (cursor != null && cursor.moveToFirst()) {
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
+                        return cursor.getLong(sizeIndex).takeIf { it >= 0 }
+                    }
+                }
+            }
+        } catch (ex: Exception) {
+            Log.e(
+                TAG,
+                "Failed to handle file size: $ex"
+            )
+        }
+
+        return null
     }
 
     @JvmStatic
@@ -761,12 +797,30 @@ object FileUtils {
         context: Context,
         uri: Uri,
         hasSafOptions: Boolean = false,
-        isReadWrite: Boolean = false
+        isReadWrite: Boolean = false,
+        maxCachedFileSize: Long? = null
     ): FileInfo? {
         var fileInputStream: InputStream? = null
         var fileOutputStream: FileOutputStream? = null
         val fileInfo = FileInfo.Builder()
         val fileName = getFileName(uri, context)
+
+        // Files over the limit are not copied: they are reported as the document
+        // provider describes them, with the content URI and no local path.
+        val reportedSize = maxCachedFileSize?.let { getFileSize(uri, context) }
+        if (reportedSize != null && exceedsMaxCachedFileSize(reportedSize, maxCachedFileSize)) {
+            fileInfo
+                .withName(fileName)
+                .withUri(uri)
+                .withSize(reportedSize)
+
+            if (hasSafOptions) {
+                fileInfo.withSafHandle(createSafHandle(uri, isReadWrite))
+            }
+
+            return fileInfo.build()
+        }
+
         val path =
             context.cacheDir.absolutePath + "/file_picker/" + System.currentTimeMillis() + "/" + (fileName
                 ?: "unamed")
@@ -814,13 +868,25 @@ object FileUtils {
             .withSize(file.length())
 
         if (hasSafOptions) {
-            val safHandleMap = java.util.HashMap<String, Any>()
-            safHandleMap["uri"] = uri.toString()
-            safHandleMap["access"] = if (isReadWrite) "readWrite" else "readOnly"
-            fileInfo.withSafHandle(safHandleMap)
+            fileInfo.withSafHandle(createSafHandle(uri, isReadWrite))
         }
 
         return fileInfo.build()
+    }
+
+    private fun createSafHandle(uri: Uri, isReadWrite: Boolean): java.util.HashMap<String, Any> {
+        val safHandleMap = java.util.HashMap<String, Any>()
+        safHandleMap["uri"] = uri.toString()
+        safHandleMap["access"] = if (isReadWrite) "readWrite" else "readOnly"
+        return safHandleMap
+    }
+
+    /**
+     * Whether a file of [size] bytes is larger than [maxCachedFileSize], the
+     * largest size that is copied to the cache. Without a limit, no file is.
+     */
+    internal fun exceedsMaxCachedFileSize(size: Long, maxCachedFileSize: Long?): Boolean {
+        return maxCachedFileSize != null && size > maxCachedFileSize
     }
 
     private fun getPathFromTreeUri(uri: Uri): String {

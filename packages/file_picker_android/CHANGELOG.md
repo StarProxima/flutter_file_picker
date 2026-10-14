@@ -1,3 +1,7 @@
+## 2.2.0
+
+- Added `FilePickerAndroidOptions.maxCachedFileSize`, to skip copying picked files larger than the given size, in bytes, to the app's cache. Those files are returned with their content URI as `uri`, the size reported by the document provider as `lengthSync()`, and no local path.
+
 ## 2.1.0
 
 - Added `FilePickerAndroid.retrieveLostData()`, to recover the files picked when Android destroys the activity while the picker is open. [#1258](https://github.com/vicajilau/flutter_file_picker/issues/1258)

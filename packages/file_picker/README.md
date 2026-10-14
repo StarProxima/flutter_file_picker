@@ -242,6 +242,31 @@ pick, which a `RestorationScope` can bring back. The result is delivered once,
 and only the most recent lost pick is kept. To reproduce it, enable
 "Don't keep activities" in the Android developer options.
 
+#### Skip copying large files on Android
+
+```dart
+List<PlatformFile> files = await FilePicker.pickFiles(
+  androidOptions: const FilePickerAndroidOptions(
+    maxCachedFileSize: 50 * 1024 * 1024,
+  ),
+);
+for (final file in files) {
+  if (file.path == null) {
+    // Larger than 50 MB, so it was not copied: use file.uri and file.lengthSync().
+  }
+}
+```
+
+Android copies every picked file into the app's cache before returning it,
+which takes time and storage for large files, even when the app is only going
+to reject them. `maxCachedFileSize` (`FilePickerAndroidOptions` comes from
+`package:android_file_picker`) sets the largest size, in bytes, that is copied.
+A larger file is returned without a local path: its `uri` is the content URI
+and `lengthSync()` is the size reported by the document provider, but its
+content cannot be read through the returned file. Files whose size the
+document provider does not report are copied as usual, and so are all files
+when the option is not set.
+
 #### Pick a directory
 
 ```dart
