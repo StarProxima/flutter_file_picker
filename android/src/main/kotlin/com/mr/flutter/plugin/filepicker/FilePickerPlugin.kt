@@ -152,6 +152,7 @@ class FilePickerPlugin : MethodCallHandler, FlutterPlugin,
                     arguments?.get("withData") as Boolean?,
                     allowedExtensions,
                     arguments?.get("compressionQuality") as Int?,
+                    (arguments?.get("maxCachedFileSize") as? Number)?.toLong(),
                     result
                 )
             }
@@ -169,6 +170,7 @@ class FilePickerPlugin : MethodCallHandler, FlutterPlugin,
                     arguments?.get("withData") as Boolean?,
                     getMimeTypes(arguments?.get("allowedExtensions") as ArrayList<String>?),
                     arguments?.get("compressionQuality") as Int?,
+                    (arguments?.get("maxCachedFileSize") as? Number)?.toLong(),
                     result
                 )
             }

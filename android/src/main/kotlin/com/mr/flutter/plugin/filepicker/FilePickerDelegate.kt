@@ -31,6 +31,7 @@ class FilePickerDelegate(
     var loadDataToMemory = false
     var type: String? = null
     var compressionQuality = 0
+    var maxCachedFileSize: Long? = null
     var allowedExtensions: ArrayList<String>? = null
     var eventSink: EventSink? = null
     var bytes: ByteArray? = null
@@ -82,7 +83,7 @@ class FilePickerDelegate(
         return when (resultCode) {
             Activity.RESULT_OK -> {
                 dispatchEventStatus(true)
-                processFiles(activity, data, compressionQuality, loadDataToMemory, type.orEmpty())
+                processFiles(activity, data, compressionQuality, loadDataToMemory, type.orEmpty(), maxCachedFileSize)
                 true
             }
 

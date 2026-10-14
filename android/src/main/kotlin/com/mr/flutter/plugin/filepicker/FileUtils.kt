@@ -53,7 +53,8 @@ object FileUtils {
         data: Intent?,
         compressionQuality: Int,
         loadDataToMemory: Boolean,
-        type: String
+        type: String,
+        maxCachedFileSize: Long?
     ) {
         CoroutineScope(Dispatchers.IO).launch {
             if (data == null) {
@@ -68,7 +69,7 @@ object FileUtils {
                     for (i in 0 until data.clipData!!.itemCount) {
                         var uri = data.clipData!!.getItemAt(i).uri
                         uri = processUri(activity, uri, compressionQuality)
-                        addFile(activity, uri, loadDataToMemory, files)
+                        addFile(activity, uri, loadDataToMemory, files, maxCachedFileSize)
                     }
                     finishWithSuccess(files)
                 }
@@ -88,7 +89,7 @@ object FileUtils {
                             finishWithError("unknown_path", "Failed to retrieve directory path.")
                         }
                     } else {
-                        addFile(activity, uri, loadDataToMemory, files)
+                        addFile(activity, uri, loadDataToMemory, files, maxCachedFileSize)
                         handleFileResult(files)
                     }
                 }
@@ -96,7 +97,7 @@ object FileUtils {
                 data.extras?.containsKey("selectedItems") == true -> {
                     val fileUris = getSelectedItems(data.extras!!)
                     fileUris?.filterIsInstance<Uri>()?.forEach { uri ->
-                        addFile(activity, uri, loadDataToMemory, files)
+                        addFile(activity, uri, loadDataToMemory, files, maxCachedFileSize)
                     }
                     finishWithSuccess(files)
                 }
@@ -208,6 +209,8 @@ object FileUtils {
      * @param withData Whether the file data should be loaded into memory.
      * @param allowedExtensions The allowed file extensions for custom file types.
      * @param compressionQuality The compression quality for images.
+     * @param maxCachedFileSize The largest size, in bytes, of a file that is copied to the cache.
+     * Larger files are not copied. Every file is copied when it is `null`.
      * @param result The MethodChannel result to send the file picking result to.
      */
     fun FilePickerDelegate?.startFileExplorer(
@@ -216,6 +219,7 @@ object FileUtils {
         withData: Boolean?,
         allowedExtensions: ArrayList<String>,
         compressionQuality: Int? = 0,
+        maxCachedFileSize: Long? = null,
         result: MethodChannel.Result
     ) {
         if (this?.setPendingMethodCallResult(result) == false) {
@@ -233,6 +237,7 @@ object FileUtils {
         if (compressionQuality != null) {
             this?.compressionQuality = compressionQuality
         }
+        this?.maxCachedFileSize = maxCachedFileSize
 
         this?.startFileExplorer()
     }
@@ -319,9 +324,10 @@ object FileUtils {
         activity: Activity,
         uri: Uri,
         loadDataToMemory: Boolean,
-        files: MutableList<FileInfo>
+        files: MutableList<FileInfo>,
+        maxCachedFileSize: Long?
     ) {
-        openFileStream(activity, uri, loadDataToMemory)?.let { file ->
+        openFileStream(activity, uri, loadDataToMemory, maxCachedFileSize)?.let { file ->
             files.add(file)
         }
     }
@@ -397,6 +403,40 @@ object FileUtils {
         }
 
         return result
+    }
+
+    /**
+     * The size in bytes that the document provider reports for [uri], or `null`
+     * when it does not report one.
+     */
+    private fun getFileSize(uri: Uri, context: Context): Long? {
+        if (uri.scheme != "content") {
+            return null
+        }
+
+        try {
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.SIZE),
+                null,
+                null,
+                null
+            ).use { cursor ->
+                if (cursor != null && cursor.moveToFirst()) {
+                    val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
+                        return cursor.getLong(sizeIndex).takeIf { it >= 0 }
+                    }
+                }
+            }
+        } catch (ex: Exception) {
+            Log.e(
+                TAG,
+                "Failed to handle file size: $ex"
+            )
+        }
+
+        return null
     }
 
     @JvmStatic
@@ -507,11 +547,29 @@ object FileUtils {
     }
 
     @JvmStatic
-    fun openFileStream(context: Context, uri: Uri, withData: Boolean): FileInfo? {
+    fun openFileStream(
+        context: Context,
+        uri: Uri,
+        withData: Boolean,
+        maxCachedFileSize: Long? = null
+    ): FileInfo? {
         var fileInputStream: InputStream? = null
         var fileOutputStream: FileOutputStream? = null
         val fileInfo = FileInfo.Builder()
         val fileName = getFileName(uri, context)
+
+        // Files over the limit are not copied, nor loaded into memory: they are reported as
+        // the document provider describes them, with the content URI and no local path.
+        val reportedSize = maxCachedFileSize?.let { getFileSize(uri, context) }
+        if (reportedSize != null && exceedsMaxCachedFileSize(reportedSize, maxCachedFileSize)) {
+            fileInfo
+                .withName(fileName)
+                .withUri(uri)
+                .withSize(reportedSize)
+
+            return fileInfo.build()
+        }
+
         val path =
             context.cacheDir.absolutePath + "/file_picker/" + System.currentTimeMillis() + "/" + (fileName
                 ?: "unamed")
@@ -558,6 +616,14 @@ object FileUtils {
             .withSize(file.length())
 
         return fileInfo.build()
+    }
+
+    /**
+     * Whether a file of [size] bytes is larger than [maxCachedFileSize], the
+     * largest size that is copied to the cache. Without a limit, no file is.
+     */
+    internal fun exceedsMaxCachedFileSize(size: Long, maxCachedFileSize: Long?): Boolean {
+        return maxCachedFileSize != null && size > maxCachedFileSize
     }
 
     private fun getPathFromTreeUri(uri: Uri): String {

@@ -39,6 +39,7 @@ class FilePickerIO extends FilePicker {
     bool? withReadStream = false,
     bool lockParentWindow = false,
     bool readSequential = false,
+    int? maxCachedFileSize,
   }) =>
       _getPath(
         type,
@@ -49,6 +50,7 @@ class FilePickerIO extends FilePicker {
         withData,
         withReadStream,
         compressionQuality,
+        maxCachedFileSize,
       );
 
   @override
@@ -81,6 +83,7 @@ class FilePickerIO extends FilePicker {
     bool? withData,
     bool? withReadStream,
     int? compressionQuality,
+    int? maxCachedFileSize,
   ) async {
     final String type = fileType.name;
     if (type != 'custom' && (allowedExtensions?.isNotEmpty ?? false)) {
@@ -110,6 +113,7 @@ class FilePickerIO extends FilePicker {
         'allowCompression': allowCompression,
         'withData': withData,
         'compressionQuality': compressionQuality,
+        'maxCachedFileSize': maxCachedFileSize,
       });
 
       if (result == null) {
@@ -119,12 +123,13 @@ class FilePickerIO extends FilePicker {
       final List<PlatformFile> platformFiles = <PlatformFile>[];
 
       for (final Map platformFileMap in result) {
+        // A file that was not copied because of [maxCachedFileSize] has no path.
+        final String? path = platformFileMap['path'];
         platformFiles.add(
           PlatformFile.fromMap(
             platformFileMap,
-            readStream: withReadStream!
-                ? File(platformFileMap['path']).openRead()
-                : null,
+            readStream:
+                withReadStream! && path != null ? File(path).openRead() : null,
           ),
         );
       }

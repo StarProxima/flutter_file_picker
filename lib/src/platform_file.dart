@@ -31,6 +31,9 @@ class PlatformFile {
   /// ```
   /// On web the path points to a Blob URL, if present, which can be cleaned up using [URL.revokeObjectURL](https://pub.dev/documentation/web/latest/web/URL/revokeObjectURL.html).
   /// Read more about it [here](https://github.com/miguelpruivo/flutter_file_picker/wiki/FAQ)
+  ///
+  /// It is `null` on Android for a file that was not copied because it is larger than the
+  /// `maxCachedFileSize` that was given to `FilePicker.pickFiles()`. Use [identifier] and [size] instead.
   final String? path;
 
   /// File name including its extension.

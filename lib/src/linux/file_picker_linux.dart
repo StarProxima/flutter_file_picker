@@ -41,6 +41,7 @@ class FilePickerLinux extends FilePicker {
     bool lockParentWindow = false,
     bool readSequential = false,
     int compressionQuality = 0,
+    int? maxCachedFileSize,
   }) async {
     final filter = Filter(type, allowedExtensions);
     Map<String, DBusValue> xdpOption = {

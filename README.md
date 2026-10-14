@@ -149,6 +149,21 @@ if (result != null) {
   // User canceled the picker
 }
 ```
+### Skip copying large files on Android
+```dart
+FilePickerResult? result = await FilePicker.platform.pickFiles(
+  maxCachedFileSize: 50 * 1024 * 1024,
+);
+
+if (result != null) {
+  for (final file in result.files) {
+    if (file.path == null) {
+      // Larger than 50 MB, so it was not copied: use file.size and file.identifier.
+    }
+  }
+}
+```
+Android copies every picked file into the app's cache before returning it, which takes time and storage for large files, even when the app is only going to reject them. `maxCachedFileSize` sets the largest size, in bytes, that is copied. A larger file is returned without a `path` and without `bytes`: its `size` is the size reported by the document provider and its `identifier` is the content URI, but its content cannot be read through the returned file. Files whose size the document provider does not report are copied as usual, and so are all files when the option is not set. It is ignored on all other platforms.
 #### Pick and upload a file to Firebase Storage with Flutter Web
 ```dart
 FilePickerResult? result = await FilePicker.platform.pickFiles();

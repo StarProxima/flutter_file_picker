@@ -52,6 +52,7 @@ class FilePickerWeb extends FilePicker {
     bool readSequential = false,
     bool cancelUploadOnWindowBlur = true,
     int compressionQuality = 0,
+    int? maxCachedFileSize,
   }) async {
     if (type != FileType.custom && (allowedExtensions?.isNotEmpty ?? false)) {
       throw Exception(
